@@ -1,8 +1,9 @@
 package reader;
 
 import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FilenameFilter;
 import java.io.IOException;
-import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -34,22 +35,40 @@ public class ReadData {
 			.getCoordinateTransformation(TransformationFactory.WGS84, "EPSG:25833");
 	Map<String, Geometry> shape;
 	Map<String, ArrayList<Long>> standzeitenProZone = new TreeMap<>();
+	static String carData = "/Users/kathrinmaier/Desktop/e-carsharing/rohdaten/fahrzeugdaten/";
 
 	public static void main(String[] args) {
-		new ReadData().run();
+		ReadData reader = new ReadData();
+		reader.init();
+		File folder = new File(carData);
+		File[] allCars = folder.listFiles(new FilenameFilter() {
+			@Override
+			public boolean accept(File dir, String name) {
+				return !name.equals(".DS_Store");
+			}
+		});
+
+		for (int i = 0; i < allCars.length; i++) {
+			if (allCars[i].isFile()) {
+				reader.run(allCars[i].getPath());
+			}
+		}
+
 	}
 
-	void run() {
+	void init() {
 		shape = readShapeFileAndExtractGeometry(
 				"/Users/kathrinmaier/Desktop/e-carsharing/LOR_SHP_EPSG_25833/Planungsraum.shp", "SCHLUESSEL");
 		for (String zone : shape.keySet()) {
 			standzeitenProZone.put(zone, new ArrayList<Long>());
 		}
+	}
+
+	void run(String carFileName) {
 
 		TabularFileParserConfig c = new TabularFileParserConfig();
 		c.setDelimiterTags(new String[] { "\t" });
-		c.setFileName(
-				"/Users/kathrinmaier/Desktop/e-carsharing/rohdaten/cs daten ba/carsharingRun2/CG_B-GO2001_WME4513341K566515.txt");
+		c.setFileName(carFileName);
 		final List<CarsharingRide> rides = new ArrayList<>();
 		new TabularFileParser().parse(c, new TabularFileHandler() {
 
@@ -99,7 +118,9 @@ public class ReadData {
 
 			}
 		}
-
+		if (standzeiten.isEmpty()) {
+			return;
+		}
 		writeStandzeiten("/Users/kathrinmaier/Desktop/e-carsharing/standzeitenprozone.csv");
 
 		System.out.println(Time.writeTime(DoubleMath.mean(standzeiten)));
@@ -116,12 +137,12 @@ public class ReadData {
 
 		BufferedWriter bw = IOUtils.getBufferedWriter(filename);
 		try {
-			bw.write("Zone;MittlereStandZeit");
+			bw.write("Zone,MittlereStandZeit");
 			for (Entry<String, ArrayList<Long>> entry : this.standzeitenProZone.entrySet()) {
 				if (entry.getValue().size() > 0) {
 					bw.newLine();
-					
-					bw.write(entry.getKey() + ";" + (DoubleMath.mean(entry.getValue())));
+
+					bw.write(entry.getKey() + "," + (DoubleMath.mean(entry.getValue())));
 				}
 			}
 			bw.flush();
