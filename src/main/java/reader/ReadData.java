@@ -6,7 +6,11 @@ import java.io.FilenameFilter;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.Date;
+import java.util.LinkedHashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -21,7 +25,6 @@ import org.matsim.core.utils.io.IOUtils;
 import org.matsim.core.utils.io.tabularFileParser.TabularFileHandler;
 import org.matsim.core.utils.io.tabularFileParser.TabularFileParser;
 import org.matsim.core.utils.io.tabularFileParser.TabularFileParserConfig;
-import org.matsim.core.utils.misc.Time;
 import org.opengis.feature.simple.SimpleFeature;
 
 import com.google.common.math.DoubleMath;
@@ -36,6 +39,10 @@ public class ReadData {
 	Map<String, Geometry> shape;
 	Map<String, ArrayList<Long>> standzeitenProZone = new TreeMap<>();
 	static String carData = "/Users/kathrinmaier/Desktop/e-carsharing/rohdaten/fahrzeugdaten/";
+	List<Standort> standorte;
+	private static int standortId = 1;
+
+	Map<String, Double> mittlereStandzeitProZone = new LinkedHashMap<>();
 
 	public static void main(String[] args) {
 		ReadData reader = new ReadData();
@@ -47,13 +54,8 @@ public class ReadData {
 				return !name.equals(".DS_Store");
 			}
 		});
-
-		for (int i = 0; i < allCars.length; i++) {
-			if (allCars[i].isFile()) {
-				reader.run(allCars[i].getPath());
-			}
-		}
-
+		reader.iterateOverAllCars(allCars);
+		reader.standzeitBerechnungen();
 	}
 
 	void init() {
@@ -62,30 +64,42 @@ public class ReadData {
 		for (String zone : shape.keySet()) {
 			standzeitenProZone.put(zone, new ArrayList<Long>());
 		}
+
 	}
 
-	void run(String carFileName) {
+	private void iterateOverAllCars(File[] allCars) {
+		for (int i = 0; i < allCars.length; i++) {
+			if (allCars[i].isFile()) {
+				run(allCars[i].getPath(), allCars[i].getName().substring(0, allCars[i].getName().length() - 4));
+			}
+		}
+
+	}
+
+	private void run(final String filePath, final String carName) {
 
 		TabularFileParserConfig c = new TabularFileParserConfig();
 		c.setDelimiterTags(new String[] { "\t" });
-		c.setFileName(carFileName);
+		c.setFileName(filePath);
 		final List<CarsharingRide> rides = new ArrayList<>();
+		standorte = new ArrayList<Standort>();
+
 		new TabularFileParser().parse(c, new TabularFileHandler() {
 
 			@Override
 			public void startRow(String[] row) {
 				try {
-					String id = row[0];
+					String rideId = row[0];
 					String x = row[1].split(",")[1];
 					String y = row[1].split(",")[0];
 					Coord start = new Coord(Double.parseDouble(x), Double.parseDouble(y));
 					x = row[2].split(",")[1];
 					y = row[2].split(",")[0];
 					Coord end = new Coord(Double.parseDouble(x), Double.parseDouble(y));
-					;
+
 					Date startTime = sdf.parse(row[3]);
 					Date endTime = sdf.parse(row[4]);
-					;
+
 					int tankVor = Integer.parseInt(row[5]);
 					int tankNach = Integer.parseInt(row[6]);
 					int distance = Integer.parseInt(row[9]);
@@ -93,44 +107,90 @@ public class ReadData {
 					int zeitStau = Integer.parseInt(row[11]);
 					int umstiege = Integer.parseInt(row[12]);
 					int zeitPT = Integer.parseInt(row[13]);
-					CarsharingRide ride = new CarsharingRide(id, start, end, startTime, endTime, tankVor, tankNach,
+					CarsharingRide ride = new CarsharingRide(rideId, start, end, startTime, endTime, tankVor, tankNach,
 							distance, zeitFrei, zeitStau, umstiege, zeitPT);
 					rides.add(ride);
+
 				} catch (Exception e) {
 
 					System.err.println("Could not parse line: " + row);
 				}
 			}
 		});
-		Date lastEnd = null;
+		Date previousEnd = null;
 		List<Long> standzeiten = new ArrayList<>();
 		for (CarsharingRide r : rides) {
-			if (lastEnd != null) {
+			if (previousEnd != null) {
+
+				Standort standort = new Standort(standortId++, carName, getZoneForCoord(r.start), r.start, previousEnd,
+						r.startTime);
+				standorte.add(standort);
+
 				String standzone = getZoneForCoord(r.start);
-				long standzeit = (r.startTime.getTime() - lastEnd.getTime()) / 1000;
-				lastEnd = r.endTime;
+				long standzeit = (r.startTime.getTime() - previousEnd.getTime()) / 1000;
+				previousEnd = r.endTime;
 				if (standzone != null) {
 					standzeitenProZone.get(standzone).add(standzeit);
 				}
 				standzeiten.add(standzeit);
 			} else {
-				lastEnd = r.endTime;
+				previousEnd = r.endTime;
 
 			}
 		}
-		if (standzeiten.isEmpty()) {
-			return;
-		}
-		writeStandzeiten("/Users/kathrinmaier/Desktop/e-carsharing/standzeitenprozone.csv");
+	}
+	
+	
+	private void standzeitBerechnungen(){
 
-		System.out.println(Time.writeTime(DoubleMath.mean(standzeiten)));
-
+		
+		// Berechne mittlere Standzeit pro Zone
+		Map<String, Double> mittlereStandzeitProZoneUnsortiert = new LinkedHashMap<>();
 		for (Entry<String, ArrayList<Long>> entry : this.standzeitenProZone.entrySet()) {
 			if (entry.getValue().size() > 0) {
-				System.out.println(entry.getKey() + "\t" + Time.writeTime(DoubleMath.mean(entry.getValue())));
+				mittlereStandzeitProZoneUnsortiert.put(entry.getKey(), computeMean(entry.getValue()));
 			}
 		}
 
+		//Sortiere Map
+		mittlereStandzeitProZone = sortByValue(mittlereStandzeitProZoneUnsortiert);
+
+		System.out.println(mittlereStandzeitProZone.size());
+		//Printe Map
+		for (Entry<String, Double> entry : this.mittlereStandzeitProZone.entrySet()) {
+			if (entry.getValue() != null) {
+				System.out.println(entry.getKey()+" : "+entry.getValue());
+			}
+		}
+
+		// Speichern der mittleren Standzeiten in CSV Datei
+		writeStandzeiten("/Users/kathrinmaier/Desktop/e-carsharing/standzeitenprozone.csv");
+
+
+
+	}
+
+	private Double computeMean(ArrayList<Long> value) {
+		Double mean = DoubleMath.mean(value);
+		
+		return mean;
+	}
+	
+	
+
+	private <K, V extends Comparable<? super V>> Map<K, V> sortByValue(Map<K, V> map) {
+		List<Map.Entry<K, V>> list = new LinkedList<Map.Entry<K, V>>(map.entrySet());
+		Collections.sort(list, new Comparator<Map.Entry<K, V>>() {
+			public int compare(Map.Entry<K, V> o1, Map.Entry<K, V> o2) {
+				return (o2.getValue()).compareTo(o1.getValue());
+			}
+		});
+
+		Map<K, V> result = new LinkedHashMap<K, V>();
+		for (Map.Entry<K, V> entry : list) {
+			result.put(entry.getKey(), entry.getValue());
+		}
+		return result;
 	}
 
 	private void writeStandzeiten(String filename) {
@@ -138,11 +198,10 @@ public class ReadData {
 		BufferedWriter bw = IOUtils.getBufferedWriter(filename);
 		try {
 			bw.write("Zone,MittlereStandZeit");
-			for (Entry<String, ArrayList<Long>> entry : this.standzeitenProZone.entrySet()) {
-				if (entry.getValue().size() > 0) {
+			for (Entry<String, Double> entry : this.mittlereStandzeitProZone.entrySet()) {
+				if (entry.getValue() != null) {
 					bw.newLine();
-
-					bw.write(entry.getKey() + "," + (DoubleMath.mean(entry.getValue())));
+					bw.write(entry.getKey() + "," + (entry.getValue()));
 				}
 			}
 			bw.flush();
