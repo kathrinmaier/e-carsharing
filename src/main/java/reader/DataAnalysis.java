@@ -8,40 +8,19 @@ import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.TreeMap;
 import java.util.Map.Entry;
 
 import com.google.common.math.DoubleMath;
 
+/**
+ * 
+ * @author kathrinmaier
+ *
+ */
 public class DataAnalysis {
 
-	static LinkedHashMap<String, ArrayList<Standort>> standorteProZone;
-	static Map<String, Double> mittlereStandzeitProZone = new LinkedHashMap<>();
-	private static LinkedHashMap<String, Double> mittlereAnzahlFzProZone;
-	
-	/**
-	 * Speichern der mittleren Standzeiten in CSV Datei
-	 */
-	public static void writeStandzeitenProZone() {
-		WriteData.writeStandzeiten("/Users/kathrinmaier/Desktop/e-carsharing/standzeitenprozone.csv",
-		DataAnalysis.mittlereStandzeitProZone);
-	}
-	
-	/**
-	 * speichere die Listen pro Zone in jeweils eigne csv Dateien
-	 */
-	public static void writeStandorteProZone() {
-		for (Entry<String, ArrayList<Standort>> entry : standorteProZone.entrySet()) {
-			if (entry.getValue() != null) {
-				WriteData.writeStandorteProZone(
-						"/Users/kathrinmaier/Desktop/e-carsharing/StandorteProZonen/standorte_in_" + entry.getKey()
-								+ ".csv",
-						entry.getKey(), entry.getValue());
-			}
-
-		}
-	}
-	
+	final static int QUANTIL = 11;
+	final static int P = 11;
 
 	/**
 	 * 
@@ -51,18 +30,37 @@ public class DataAnalysis {
 	public static Double computeMean(ArrayList<Long> value) {
 		return DoubleMath.mean(value);
 	}
+
+	public static Double computeMean(Map<String, Double> map) {
+		ArrayList<Double> list = new ArrayList<Double>();
+
+		for (Entry<String, Double> entry : map.entrySet()) {
+			list.add(entry.getValue());
+		}
+		return DoubleMath.mean(list);
+	}
 	
+	public static double computeSum(Map<String, Double> map) {
+		double sum = 0;
+		for (Entry<String, Double> entry : map.entrySet()) {
+			sum += entry.getValue();
+		}
+		return sum;
+	}
+
 	/**
 	 * 
 	 * @return
 	 */
-	public static Map<String, Double> mittlereStandzeitBerechnung(Map<String, ArrayList<Long>> standzeitenProZone) {
+	public static Map<String, Double> berechneMittlereStandzeitProZone(
+			Map<String, ArrayList<Long>> standzeitenProZone) {
 
 		// Berechne mittlere Standzeit pro Zone
 		Map<String, Double> mittlereStandzeitProZoneUnsortiert = new LinkedHashMap<>();
 		for (Entry<String, ArrayList<Long>> entry : standzeitenProZone.entrySet()) {
 			if (entry.getValue().size() > 0) {
 				mittlereStandzeitProZoneUnsortiert.put(entry.getKey(), DataAnalysis.computeMean(entry.getValue()));
+				// System.out.println(mittlereStandzeitProZoneUnsortiert.get(entry.getKey()));
 			}
 		}
 
@@ -72,44 +70,47 @@ public class DataAnalysis {
 		return mittlereStandzeitProZone;
 
 	}
-	
+
 	/**
 	 * 
 	 * @param anzahlFzProZone
 	 * @return
 	 */
-	public static void berechneMittlereAnzahlFzProZone(Map<String, short[]> anzahlFzProZone) {
-		mittlereAnzahlFzProZone = new LinkedHashMap<String, Double>();
+	public static Map<String, Double> berechneMittlereAnzahlFzProZone(Map<String, short[]> anzahlFzProZone) {
+		Map<String, Double> mittlereAnzahlFzProZone = new LinkedHashMap<String, Double>();
 		for (Entry<String, short[]> entry : anzahlFzProZone.entrySet()) {
-			if(entry.getValue()==null) continue;
+			if (entry.getValue() == null)
+				continue;
 			int sum = 0;
-			for (int i = 0; i<entry.getValue().length;i++) {
+			for (int i = 0; i < entry.getValue().length; i++) {
 				sum += entry.getValue()[i];
 			}
 			double durchschnittlicheFz = sum * 1.0 / entry.getValue().length * 1.0;
 			mittlereAnzahlFzProZone.put(entry.getKey(), durchschnittlicheFz);
-			
+
 		}
 		mittlereAnzahlFzProZone = (LinkedHashMap<String, Double>) sortByValue(mittlereAnzahlFzProZone);
-		for (Entry<String, Double> entry : mittlereAnzahlFzProZone.entrySet()) {
-			System.out.println(entry.getKey()+" : "+entry.getValue());
-		}
+		// for (Entry<String, Double> entry :
+		// mittlereAnzahlFzProZone.entrySet()) {
+		// System.out.println(entry.getKey() + " : " + entry.getValue());
+		// }
+		return mittlereAnzahlFzProZone;
 	}
-	
+
 	/**
 	 * 
 	 * @param standorte
 	 * @return
 	 */
-	public static void berechneStandorteProZone(List<Standort> standorte) {
-		
-		
+	public static Map<String, ArrayList<Standort>> berechneStandorteProZone(List<Standort> standorte,
+			Map<String, Double> mittlereStandzeitProZone) {
+
 		int startIndex = 0;
 		int endIndex = mittlereStandzeitProZone.keySet().size();
-		
-		standorteProZone = new LinkedHashMap<String, ArrayList<Standort>>();
+
+		Map<String, ArrayList<Standort>> standorteProZone = new LinkedHashMap<String, ArrayList<Standort>>();
 		// iteriere über "mittleStandzeitProZone von startIndex bis endIndex
-		System.out.println("Berechne Standorte pro Zone bei ingesamt " + standorte.size() + " Standorten");
+
 		for (int i = startIndex; i < endIndex; i++) {
 
 			String zone = (String) mittlereStandzeitProZone.keySet().toArray()[i];
@@ -126,26 +127,32 @@ public class DataAnalysis {
 				}
 			}
 		}
+		return standorteProZone;
 	}
-	
+
 	/**
 	 * 
 	 * @param arrayLength
 	 * @param earliestDate
 	 * @return
 	 */
-	public static Map<String, short[]> berechneAnzahlFzProZeitintervallProZone(int arrayLength, long earliestDate) {
+	public static Map<String, short[]> berechneAnzahlFzProZeitintervallProZone(ReadData reader,
+			Map<String, ArrayList<Standort>> standorteProZone) {
 		// Map <ZonenId, AnzahlFzgProZeitIntervall>
+		int arrayLength = DataAnalysis.safeLongToInt((reader.getLatestDate() - reader.getEarliestDate()) / 60000);
+
 		Map<String, short[]> anzahlFzProZone = new HashMap<String, short[]>();
-		
+
 		for (Entry<String, ArrayList<Standort>> entry : standorteProZone.entrySet()) {
 			anzahlFzProZone.put(entry.getKey(), initArray(arrayLength));
-			System.out.println(entry.getKey());
+
 			if (entry.getValue() != null) {
 				for (Standort standort : entry.getValue()) {
 					try {
-						int startIndex = safeLongToInt((standort.getStartTime().getTime() - earliestDate) / 60000);
-						int endIndex = safeLongToInt((standort.getEndTime().getTime() - earliestDate) / 60000);
+						int startIndex = safeLongToInt(
+								(standort.getStartTime().getTime() - reader.getEarliestDate()) / 60000);
+						int endIndex = safeLongToInt(
+								(standort.getEndTime().getTime() - reader.getEarliestDate()) / 60000);
 
 						for (int i = startIndex; i <= endIndex; i++) {
 							anzahlFzProZone.get(entry.getKey())[i]++;
@@ -158,9 +165,78 @@ public class DataAnalysis {
 		}
 		return anzahlFzProZone;
 	}
+
+	/**
+	 * Ladebedarf pro Zone d. Erst nach Aufruf von mittlereStandzeitProZone()
+	 * und berechenMittlereAnzahlFzProZone möglich!!!
+	 * 
+	 * @return Map mit mittleren Ladebedarfen pro Zone
+	 */
+	public static Map<String, Double> berechneLadebedarfProZoneGewichtet(Map<String, Double> mittlereAnzahlFzProZone,
+			Map<String, Double> mittlereStandzeitProZone) {
+		Map<String, Double> ladebedarfProZone = new LinkedHashMap<String, Double>();
+		double gamma = 0.0;
+		int increment = 0;
+		int counter = 0;
+		int anzahlZonen = mittlereStandzeitProZone.size();
+
+		for (Entry<String, Double> entry : mittlereAnzahlFzProZone.entrySet()) {
+
+			String zonenID = entry.getKey();
+
+			double n = entry.getValue();
+			double t = mittlereStandzeitProZone.get(zonenID) / 60.0; // t in
+																		// Stunden
+
+			// Berechnungsformel für den Ladebedarf pro Zone
+			double d = P * n * t * gamma;
+			System.out.println(zonenID+ " : "+d +" = "+n+" * "+t+" * "+gamma);
+
+			ladebedarfProZone.put(zonenID, d);
+
+			counter++;
+			// Gamma != 2, um bei einer Teilefremden Anzahl der Zonen im Bereich
+			// [0,2] zu bleiben.
+			if (counter >= (anzahlZonen / QUANTIL) && gamma < 2) {
+				counter = 0;
+				increment += 2;
+				gamma = increment / (QUANTIL - 1.0);
+				
+			}
+
+		}
+
+		return ladebedarfProZone;
+
+	}
 	
+	public static  Map<String, Double> berechneLadebedarfProZoneUngewichtet(Map<String, Double> mittlereAnzahlFzProZone,
+			Map<String, Double> mittlereStandzeitProZone) {
+		Map<String, Double> ladebedarfProZone = new LinkedHashMap<String, Double>();
+
+		for (Entry<String, Double> entry : mittlereAnzahlFzProZone.entrySet()) {
+
+			String zonenID = entry.getKey();
+
+			double n = entry.getValue();
+			double t = mittlereStandzeitProZone.get(zonenID) / 60.0; // t in
+																		// Stunden
+
+			// Berechnungsformel für den Ladebedarf pro Zone
+			double d = P * n * t;
+			//System.out.println(d +" = "+n+" * "+t+" * "+gamma);
+
+			ladebedarfProZone.put(zonenID, d);
+
+		}
+
+		return ladebedarfProZone;
+	}
+
+
 	/**
 	 * Initializes a array of length l with values zero
+	 * 
 	 * @param l
 	 * @return
 	 */
@@ -171,10 +247,10 @@ public class DataAnalysis {
 		}
 		return array;
 	}
-	
 
 	/**
-	 * Safe conversion of long to int 
+	 * Safe conversion of long to int
+	 * 
 	 * @param l
 	 * @return int
 	 */
@@ -184,17 +260,18 @@ public class DataAnalysis {
 		}
 		return (int) l;
 	}
-	
+
 	/**
 	 * Util comparable, sorting a map regarding its values
+	 * 
 	 * @paramn unsorted map
 	 * @return sorted map
 	 */
-	private static <K, V extends Comparable<? super V>> Map<K, V> sortByValue(Map<K, V> map) {
+	public static <K, V extends Comparable<? super V>> Map<K, V> sortByValue(Map<K, V> map) {
 		List<Map.Entry<K, V>> list = new LinkedList<Map.Entry<K, V>>(map.entrySet());
 		Collections.sort(list, new Comparator<Map.Entry<K, V>>() {
 			public int compare(Map.Entry<K, V> o1, Map.Entry<K, V> o2) {
-				return (o2.getValue()).compareTo(o1.getValue());
+				return (o1.getValue()).compareTo(o2.getValue());
 			}
 		});
 
@@ -204,6 +281,5 @@ public class DataAnalysis {
 		}
 		return result;
 	}
-	
 
 }

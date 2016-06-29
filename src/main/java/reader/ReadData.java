@@ -25,6 +25,11 @@ import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.io.WKTReader;
 
+/**
+ * 
+ * @author kathrinmaier
+ *
+ */
 public class ReadData {
 	static SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm");
 	static CoordinateTransformation trans = TransformationFactory
@@ -32,14 +37,26 @@ public class ReadData {
 	Map<String, Geometry> shape;
 	static String carData = "/Users/kathrinmaier/Desktop/e-carsharing/rohdaten/fahrzeugdaten/";
 	int nullZoneCounter = 0;
-	List<Standort> standorte;
-	private Map<String, ArrayList<Long>> standzeitenProZone;
+
 	private static int standortId = 1;
 
-	private static long earliestDate = Long.MAX_VALUE;
-	private static long latestDate = Long.MIN_VALUE;
+	private List<Standort> standorte;
+	private Map<String, ArrayList<Long>> standzeitenProZone;
+	private long earliestDate = Long.MAX_VALUE;
+	private long latestDate = Long.MIN_VALUE;
 
-	
+	public ReadData() {
+		init();
+		File folder = new File(carData);
+		File[] allCars = folder.listFiles(new FilenameFilter() {
+			@Override
+			public boolean accept(File dir, String name) {
+				return !name.equals(".DS_Store");
+			}
+		});
+		iterateOverAllCars(allCars);
+	}
+
 	/**
 	 * 
 	 * @param args
@@ -56,8 +73,8 @@ public class ReadData {
 		});
 		// standorte werden erzeugt
 		reader.iterateOverAllCars(allCars);
-	    //StandortDaten werden zerlegt und analyisiert
-		reader.runAnalysis();
+		// StandortDaten werden zerlegt und analyisiert
+
 	}
 
 	/**
@@ -69,7 +86,7 @@ public class ReadData {
 		for (String zone : shape.keySet()) {
 			standzeitenProZone.put(zone, new ArrayList<Long>());
 		}
-	
+
 	}
 
 	/**
@@ -83,7 +100,7 @@ public class ReadData {
 			}
 		}
 		System.out.println("Anzahl der Standort mit zone == null :" + nullZoneCounter);
-	
+
 	}
 
 	/**
@@ -92,14 +109,14 @@ public class ReadData {
 	 * @param carName
 	 */
 	private void erzeugeStandorteProAuto(final String filePath, final String carName) {
-	
+
 		TabularFileParserConfig c = new TabularFileParserConfig();
 		c.setDelimiterTags(new String[] { "\t" });
 		c.setFileName(filePath);
 		final List<CarsharingRide> rides = new ArrayList<>();
-	
+
 		new TabularFileParser().parse(c, new TabularFileHandler() {
-	
+
 			@Override
 			public void startRow(String[] row) {
 				try {
@@ -110,7 +127,7 @@ public class ReadData {
 					x = row[2].split(",")[1];
 					y = row[2].split(",")[0];
 					Coord end = new Coord(Double.parseDouble(x), Double.parseDouble(y));
-	
+
 					Date startTime = sdf.parse(row[3]);
 					if (startTime.getTime() < earliestDate) {
 						earliestDate = startTime.getTime();
@@ -119,7 +136,7 @@ public class ReadData {
 					if (endTime.getTime() > latestDate) {
 						latestDate = endTime.getTime();
 					}
-	
+
 					int tankVor = Integer.parseInt(row[5]);
 					int tankNach = Integer.parseInt(row[6]);
 					int distance = Integer.parseInt(row[9]);
@@ -130,9 +147,9 @@ public class ReadData {
 					CarsharingRide ride = new CarsharingRide(rideId, start, end, startTime, endTime, tankVor, tankNach,
 							distance, zeitFrei, zeitStau, umstiege, zeitPT);
 					rides.add(ride);
-	
+
 				} catch (Exception e) {
-	
+
 					System.err.println("Could not parse line: " + row);
 				}
 			}
@@ -148,12 +165,13 @@ public class ReadData {
 					nullZoneCounter++;
 					zone = "-1";
 				}
-	
+
 				Standort standort = new Standort(standortId++, carName, zone, r.start, previousEnd, r.startTime);
 				standorte.add(standort);
-	
+
 				String standzone = getZoneForCoord(r.start);
-				long standzeit = (r.startTime.getTime() - previousEnd.getTime()) / 1000;
+				long standzeit = (r.startTime.getTime() - previousEnd.getTime()) / 60000; // in
+																							// Minuten
 				previousEnd = r.endTime;
 				if (standzone != null) {
 					standzeitenProZone.get(standzone).add(standzeit);
@@ -161,24 +179,9 @@ public class ReadData {
 				standzeiten.add(standzeit);
 			} else {
 				previousEnd = r.endTime;
-	
+
 			}
 		}
-	}
-
-	/**
-	 * 
-	 */
-	void runAnalysis() {
-		DataAnalysis.mittlereStandzeitBerechnung(standzeitenProZone);
-		DataAnalysis.berechneStandorteProZone(standorte);
-
-		int arrayLength = DataAnalysis.safeLongToInt((latestDate - earliestDate) / 60000);
-		Map<String, short[]> a = DataAnalysis.berechneAnzahlFzProZeitintervallProZone(arrayLength, earliestDate);
-		DataAnalysis.berechneMittlereAnzahlFzProZone(a);
-		
-		DataAnalysis.writeStandorteProZone();
-		DataAnalysis.writeStandzeitenProZone();
 	}
 
 	/**
@@ -224,6 +227,26 @@ public class ReadData {
 
 		}
 		return geometry;
+	}
+
+	public long getEarliestDate() {
+		return earliestDate;
+	}
+
+	public long getLatestDate() {
+		return latestDate;
+	}
+
+	public List<Standort> getStandorte() {
+		return standorte;
+	}
+
+	public Map<String, ArrayList<Long>> getStandzeitenProZone() {
+		return standzeitenProZone;
+	}
+
+	public void setEarliestDate(long earliestDate) {
+		this.earliestDate = earliestDate;
 	}
 
 }
