@@ -19,8 +19,7 @@ import com.google.common.math.DoubleMath;
  */
 public class DataAnalysis {
 
-	final static int QUANTIL = 11;
-	final static int P = 11;
+
 
 	/**
 	 * 
@@ -173,7 +172,12 @@ public class DataAnalysis {
 	 * @return Map mit mittleren Ladebedarfen pro Zone
 	 */
 	public static Map<String, Double> berechneLadebedarfProZoneGewichtet(Map<String, Double> mittlereAnzahlFzProZone,
-			Map<String, Double> mittlereStandzeitProZone) {
+			Map<String, Double> mittlereStandzeitProZone,
+			final int P, final int QUANTIL) {
+		if (QUANTIL == 1) {
+			return berechneLadebedarfProZoneUngewichtet(mittlereAnzahlFzProZone, mittlereStandzeitProZone, P);
+		}
+		
 		Map<String, Double> ladebedarfProZone = new LinkedHashMap<String, Double>();
 		double gamma = 0.0;
 		int increment = 0;
@@ -190,7 +194,7 @@ public class DataAnalysis {
 
 			// Berechnungsformel für den Ladebedarf pro Zone
 			double d = P * n * t * gamma;
-			System.out.println(zonenID+ " : "+d +" = "+n+" * "+t+" * "+gamma);
+			//System.out.println(zonenID+ " : "+d +" = "+n+" * "+t+" * "+gamma);
 
 			ladebedarfProZone.put(zonenID, d);
 
@@ -211,7 +215,7 @@ public class DataAnalysis {
 	}
 	
 	public static  Map<String, Double> berechneLadebedarfProZoneUngewichtet(Map<String, Double> mittlereAnzahlFzProZone,
-			Map<String, Double> mittlereStandzeitProZone) {
+			Map<String, Double> mittlereStandzeitProZone, final int P) {
 		Map<String, Double> ladebedarfProZone = new LinkedHashMap<String, Double>();
 
 		for (Entry<String, Double> entry : mittlereAnzahlFzProZone.entrySet()) {
@@ -231,6 +235,68 @@ public class DataAnalysis {
 		}
 
 		return ladebedarfProZone;
+	}
+	
+	/**
+	 * Berechnung des Ladebedarfs für zwei quantile. Es wird die Differenz beider berechnter Werte pro Zone gespeichert.
+	 * @param mittlereAnzahlFzProZone
+	 * @param mittlereStandzeitProZone
+	 * @param p
+	 * @param quantil1
+	 * @param quantil2
+	 * @return
+	 */
+	public static Map<String, Double> berechneDifferenzenImLadebedarf(Map<String, Double> mittlereAnzahlFzProZone, Map<String, Double> mittlereStandzeitProZone, int p, int quantil1, int quantil2){
+		Map<String,Double> differenz = new LinkedHashMap<String,Double>();
+		
+		Map<String,Double> map1 = berechneLadebedarfProZoneGewichtet(mittlereAnzahlFzProZone, mittlereStandzeitProZone, p, quantil1);
+		Map<String,Double> map2 = berechneLadebedarfProZoneGewichtet(mittlereAnzahlFzProZone, mittlereStandzeitProZone, p, quantil2);
+		
+		for (Entry<String,Double> entry1 : map1.entrySet()) {
+			double d1 = entry1.getValue();
+			double d2 = map2.get(entry1.getKey());
+			differenz.put(entry1.getKey(), d1-d2);
+		}
+		
+		return differenz;
+	}
+	
+	/**
+	 * Median fahrzeuge = 3.5 / Median Standzeit = 230 min
+	 * => 1 Fahrhezug - 1 Stunde == n - t
+	 * @param scoringMap
+	 * @param mittlereAnzahlFzProZone
+	 * @param mittlereStandzeitProZone
+	 * @param alpha
+	 * @param beta
+	 * @return
+	 */
+	public static Map<String, Double> scoringMethod(Map<String, Double> scoringMap,
+			Map<String, Double> mittlereAnzahlFzProZone, Map<String, Double> mittlereStandzeitProZone, double alpha, double beta) {
+		
+		for (Entry<String, Double> entry : mittlereAnzahlFzProZone.entrySet()) {
+
+			String zonenID = entry.getKey();
+
+			double n = entry.getValue();
+			if(mittlereStandzeitProZone.get(zonenID) == null) continue;
+			double t = mittlereStandzeitProZone.get(zonenID) / 60.0; // t in
+																		// Stunden
+
+			
+			double score = (alpha*n) + (t*beta);
+			//System.out.println(d +" = "+n+" * "+t+" * "+gamma);
+			if(scoringMap.get(zonenID)!=null){
+				score += scoringMap.get(zonenID);
+			}
+			scoringMap.put(zonenID, score);
+
+		}
+
+		
+		
+		return scoringMap;
+		
 	}
 
 

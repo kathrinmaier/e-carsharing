@@ -36,6 +36,8 @@ public class WriteData {
 					bw.write(entry.getKey() + "," + (entry.getValue()));
 				}
 			}
+			bwCVST.flush();
+			bwCVST.close();
 			bw.flush();
 			bw.close();
 		} catch (IOException e) {
@@ -66,6 +68,8 @@ public class WriteData {
 			}
 			bw.flush();
 			bw.close();
+			bwCVST.flush();
+			bwCVST.close();
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -92,6 +96,8 @@ public class WriteData {
 					bw.write(entry.getKey() + "," + (entry.getValue()));
 				}
 			}
+			bwCVST.flush();
+			bwCVST.close();
 			bw.flush();
 			bw.close();
 		} catch (IOException e) {
